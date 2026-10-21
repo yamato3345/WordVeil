@@ -1,0 +1,41 @@
+.alphabet-panel {
+  width: 100%;
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 8px;
+  padding: 0 6px 8px;
+}
+
+.alphabet-item {
+  width: 100%;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.alphabet-item:hover {
+  background: linear-gradient(91.32deg, #d4ccfc -0.02%, #c9c9ef 100.02%);
+  color: var(--text);
+}
+
+.alphabet-item.is-active {
+  background: rgba(117, 103, 215, 0.12);
+  color: var(--purple-strong);
+  box-shadow: inset 0 0 0 1px rgba(117, 103, 215, 0.18);
+}
+
+.alphabet-item.is-active:hover {
+  background: linear-gradient(91.32deg, #d4ccfc -0.02%, #c9c9ef 100.02%);
+  color: var(--text);
+}

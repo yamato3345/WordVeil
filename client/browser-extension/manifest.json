@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "WordVeil Selection Bridge",
+  "version": "1.0.0",
+  "description": "Sends the selected text from the browser to the local Tauri app.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "http://localhost:8765/*",
+    "http://127.0.0.1:8765/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
