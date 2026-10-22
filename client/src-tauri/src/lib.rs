@@ -1,14 +1,37 @@
 use std::process::Command;
+use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 use tauri::{Emitter, LogicalPosition, Manager, Position, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+struct OverlayState {
+    word: Mutex<String>,
+}
+
+fn encode_uri_component(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char);
+            }
+            b' ' => encoded.push_str("%20"),
+            _ => encoded.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+
+    encoded
+}
 
 #[tauri::command]
 fn read_clipboard_word() -> Result<String, String> {
     let candidates = [
+        vec!["wl-paste", "--no-newline"],
         vec!["wl-paste", "--no-newline", "--primary"],
-        vec!["wl-paste", "--no-newline", "--clipboard"],
-        vec!["xclip", "-selection", "primary", "-o"],
         vec!["xclip", "-selection", "clipboard", "-o"],
+        vec!["xclip", "-selection", "primary", "-o"],
     ];
 
     for args in candidates {
@@ -79,49 +102,87 @@ async fn capture_selected_text() -> Result<String, String> {
     result
 }
 
-fn encode_uri_component(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len());
-
-    for byte in value.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
-                encoded.push(byte as char);
-            }
-            b' ' => encoded.push_str("%20"),
-            _ => encoded.push_str(&format!("%{:02X}", byte)),
-        }
+#[tauri::command]
+fn show_word_overlay(
+    app: tauri::AppHandle,
+    state: tauri::State<OverlayState>,
+    word: String,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    if word.trim().is_empty() {
+        return Ok(());
     }
 
-    encoded
-}
+    if let Ok(mut current_word) = state.word.lock() {
+        *current_word = word.clone();
+    }
 
-#[tauri::command]
-fn show_word_overlay(app: tauri::AppHandle, word: String, x: f64, y: f64) -> Result<(), String> {
     let encoded_word = encode_uri_component(&word);
-    let url = format!("overlay.html?word={encoded_word}&x={x}&y={y}");
+    let url = format!("overlay.html?word={encoded_word}");
 
     if let Some(window) = app.get_webview_window("word-overlay") {
         let _ = window.set_position(Position::Logical(LogicalPosition::new(x, y)));
+        let _ = window.set_always_on_top(true);
+        let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        if let Ok(serialized_word) = serde_json::to_string(&word) {
+            let _ = window.eval(&format!(
+                "window.__WORDVEIL_SET_WORD && window.__WORDVEIL_SET_WORD({serialized_word});"
+            ));
+        }
         let _ = window.emit("word-overlay:update", serde_json::json!({ "word": word }));
         return Ok(());
     }
 
-    let window = WebviewWindowBuilder::new(&app, "word-overlay", WebviewUrl::App(url.into()))
+    let window = WebviewWindowBuilder::new(
+        &app,
+        "word-overlay",
+        WebviewUrl::App(url.into()),
+    )
         .title("Selected Word")
         .inner_size(220.0, 110.0)
         .position(x, y)
         .transparent(true)
         .decorations(false)
         .always_on_top(true)
+        .visible_on_all_workspaces(true)
         .shadow(false)
         .skip_taskbar(true)
+        .focused(true)
         .build()
         .map_err(|err| format!("Failed to create overlay window: {err}"))?;
 
+    let _ = window.set_focus();
     window.show().map_err(|err| format!("Failed to show overlay window: {err}"))?;
+    let _ = window.emit("word-overlay:update", serde_json::json!({ "word": word }));
+
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        thread::sleep(Duration::from_millis(3600));
+        if let Some(existing) = app_handle.get_webview_window("word-overlay") {
+            let _ = existing.close();
+        }
+    });
+
     Ok(())
+}
+
+#[tauri::command]
+fn close_word_overlay(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("word-overlay") {
+        let _ = window.close();
+    }
+}
+
+#[tauri::command]
+fn get_overlay_word(state: tauri::State<OverlayState>) -> String {
+    state
+        .word
+        .lock()
+        .map(|value| value.clone())
+        .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -142,6 +203,9 @@ fn get_session_type() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(OverlayState {
+            word: Mutex::new(String::new()),
+        })
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -199,6 +263,8 @@ pub fn run() {
             read_clipboard_word,
             capture_selected_text,
             show_word_overlay,
+            close_word_overlay,
+            get_overlay_word,
             log_selected_word,
             log_shortcut_status,
             get_session_type

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { GlobalWordsSelection } from "./globalSelection/GlobalWordsSelection";
 import "./WordSelection.scss";
@@ -11,10 +11,15 @@ export type SelectedWord = {
 
 export function WordSelection() {
   const [selectedWord, setSelectedWord] = useState<SelectedWord | null>(null);
-  const [mousePosition, setMousePosition] = useState({ x: window.innerWidth - 260, y: 80 });
+  const mousePositionRef = useRef({ x: window.innerWidth - 260, y: 80 });
 
   const handleWordSelected = async (text: string, position?: { x: number; y: number }) => {
     const normalized = text.trim();
+    if (!normalized) {
+      console.log("[WordSelection] empty word ignored");
+      return;
+    }
+
     console.log("[WordSelection] word captured:", normalized);
 
     try {
@@ -26,7 +31,7 @@ export function WordSelection() {
       console.error("[WordSelection] failed to log selected word in terminal", error);
     }
 
-    const point = position ?? mousePosition;
+    const point = position ?? mousePositionRef.current;
     const x = Math.min(Math.max(point.x + 18, 18), window.innerWidth - 220);
     const y = Math.max(point.y - 30, 18);
 
@@ -50,7 +55,7 @@ export function WordSelection() {
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
-      setMousePosition({ x: event.clientX, y: event.clientY });
+      mousePositionRef.current = { x: event.clientX, y: event.clientY };
     };
 
     const handleFallbackShortcut = (event: KeyboardEvent) => {
@@ -59,15 +64,30 @@ export function WordSelection() {
         return;
       }
 
-      event.preventDefault();
       console.log("[WordSelection] Ctrl+C detected in window, clipboard capture will follow.");
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
+    const handleEscapeClose = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      void invoke("close_word_overlay");
+    };
+
+    const handleMouseDownClose = () => {
+      void invoke("close_word_overlay");
+    };
+
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
     window.addEventListener("keydown", handleFallbackShortcut);
+    window.addEventListener("keydown", handleEscapeClose);
+    window.addEventListener("mousedown", handleMouseDownClose, { passive: true });
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("keydown", handleFallbackShortcut);
+      window.removeEventListener("keydown", handleEscapeClose);
+      window.removeEventListener("mousedown", handleMouseDownClose);
     };
   }, []);
 

@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  CLIPBOARD_CAPTURE_COOLDOWN_MS,
+  CLIPBOARD_CTRL_C_READ_DELAY_MS,
+  CLIPBOARD_POLL_INTERVAL_MS,
+} from "./overlay/clipboardConfig";
 
 const normalizeWord = (value: string) => {
   const cleaned = value
@@ -26,6 +31,8 @@ type GlobalWordsSelectionProps = {
 export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSelectionProps) {
   const lastClipboardRawRef = useRef("");
   const isPollingClipboardRef = useRef(false);
+  const lastCaptureAtRef = useRef(0);
+  const baselineReadyRef = useRef(false);
 
   const debug = (message: string, detail?: unknown) => {
     const stamp = new Date().toLocaleTimeString();
@@ -41,6 +48,19 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
     const trimmed = raw.trim();
     debug("clipboard raw value received", trimmed);
 
+    if (!baselineReadyRef.current) {
+      lastClipboardRawRef.current = trimmed;
+      baselineReadyRef.current = true;
+      debug("clipboard baseline initialized");
+      return;
+    }
+
+    const now = Date.now();
+    if (now - lastCaptureAtRef.current < CLIPBOARD_CAPTURE_COOLDOWN_MS) {
+      debug("clipboard value ignored: cooldown active");
+      return;
+    }
+
     if (!trimmed || trimmed === lastClipboardRawRef.current) {
       debug("clipboard value ignored: empty or unchanged");
       return;
@@ -54,6 +74,16 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
     if (!text) {
       debug("no valid word found in clipboard value");
       return;
+    }
+
+    lastCaptureAtRef.current = now;
+    try {
+      await invoke("log_selected_word", {
+        source: "globalSelection",
+        word: text,
+      });
+    } catch (error) {
+      debug("failed to log selected word via backend", error);
     }
 
     debug("selected word from clipboard", text);
@@ -83,6 +113,7 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
   useEffect(() => {
     if (!active) {
       lastClipboardRawRef.current = "";
+      baselineReadyRef.current = false;
       debug("global selection disabled");
       return;
     }
@@ -96,21 +127,23 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
       debug("Ctrl+C pressed");
       window.setTimeout(() => {
         void readClipboardWord();
-      }, 80);
+      }, CLIPBOARD_CTRL_C_READ_DELAY_MS);
     };
 
     window.addEventListener("keydown", handleCopyShortcut);
-    debug("global selection listener attached");
+    debug("global selection listeners attached");
+
+    // Build a baseline from current clipboard so app start does not trigger popup.
+    void readClipboardWord();
 
     const intervalId = window.setInterval(() => {
-      debug("global poll tick");
       void readClipboardWord();
-    }, 1200);
+    }, CLIPBOARD_POLL_INTERVAL_MS);
 
     return () => {
       window.removeEventListener("keydown", handleCopyShortcut);
       window.clearInterval(intervalId);
-      debug("global selection listener removed");
+      debug("global selection listeners removed");
     };
   }, [active]);
 

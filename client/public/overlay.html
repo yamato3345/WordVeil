@@ -62,26 +62,99 @@
   <body>
     <div class="panel">
       <span class="label">Selected word</span>
-      <strong class="value" id="wordValue">word</strong>
+      <strong class="value" id="wordValue"></strong>
     </div>
 
     <script>
+      const { invoke } = window.__TAURI__.core;
+      const tauriEvent = window.__TAURI__.event;
+      const overlaySettings = window.__WORDVEIL_OVERLAY_SETTINGS || {
+        closeDelay: 3300,
+        updateEventName: "word-overlay:update",
+        fallbackText: "",
+      };
       const params = new URLSearchParams(window.location.search);
-      const rawWord = params.get("word") || "word";
-      const word = decodeURIComponent(rawWord);
-      document.getElementById("wordValue").textContent = word || "word";
+      const initialWord = decodeURIComponent(params.get("word") || "").trim();
+      const wordNode = document.getElementById("wordValue");
 
-      const closeOverlay = () => {
-        window.close();
+      const renderWord = (nextWord) => {
+        const value = typeof nextWord === "string" ? nextWord.trim() : "";
+        wordNode.textContent = value || overlaySettings.fallbackText || "";
+
+        if (!value) {
+          void closeOverlay();
+        }
       };
 
-      setTimeout(closeOverlay, 3500);
-      document.addEventListener("mousedown", closeOverlay);
+      let closed = false;
+      let closeTimer = null;
+
+      const closeOverlay = async () => {
+        if (closed) {
+          return;
+        }
+
+        closed = true;
+        try {
+          await invoke("close_word_overlay");
+        } catch (_error) {
+          window.close();
+        }
+      };
+
+      const scheduleClose = () => {
+        if (closeTimer) {
+          clearTimeout(closeTimer);
+        }
+
+        closeTimer = setTimeout(() => {
+          void closeOverlay();
+        }, overlaySettings.closeDelay);
+      };
+
+      window.__WORDVEIL_SET_WORD = (nextWord) => {
+        renderWord(nextWord);
+        scheduleClose();
+      };
+
+      const hydrateInitialWord = async () => {
+        try {
+          const currentWord = await invoke("get_overlay_word");
+          const fromState = typeof currentWord === "string" ? currentWord.trim() : "";
+          renderWord(fromState || initialWord);
+        } catch (_error) {
+          renderWord(initialWord);
+        }
+      };
+
+      void hydrateInitialWord();
+      scheduleClose();
+
+      if (tauriEvent && typeof tauriEvent.listen === "function") {
+        tauriEvent.listen(overlaySettings.updateEventName, (event) => {
+          const nextWord = event?.payload?.word;
+          window.__WORDVEIL_SET_WORD(typeof nextWord === "string" ? nextWord : "");
+        });
+      }
+
+      document.addEventListener("mousedown", () => {
+        void closeOverlay();
+      });
+      document.addEventListener("pointerdown", () => {
+        void closeOverlay();
+      });
+      document.addEventListener("touchstart", () => {
+        void closeOverlay();
+      }, { passive: true });
       window.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          closeOverlay();
+          void closeOverlay();
         }
+      });
+
+      window.addEventListener("blur", () => {
+        void closeOverlay();
       });
     </script>
   </body>
