@@ -33,6 +33,8 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
   const isPollingClipboardRef = useRef(false);
   const lastCaptureAtRef = useRef(0);
   const baselineReadyRef = useRef(false);
+  const intervalRef = useRef<number | null>(null);
+  const shortcutTimeoutRef = useRef<number | null>(null);
 
   const debug = (message: string, detail?: unknown) => {
     const stamp = new Date().toLocaleTimeString();
@@ -125,7 +127,11 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
       }
 
       debug("Ctrl+C pressed");
-      window.setTimeout(() => {
+      if (shortcutTimeoutRef.current) {
+        window.clearTimeout(shortcutTimeoutRef.current);
+      }
+
+      shortcutTimeoutRef.current = window.setTimeout(() => {
         void readClipboardWord();
       }, CLIPBOARD_CTRL_C_READ_DELAY_MS);
     };
@@ -136,13 +142,24 @@ export function GlobalWordsSelection({ active, onWordSelected }: GlobalWordsSele
     // Build a baseline from current clipboard so app start does not trigger popup.
     void readClipboardWord();
 
-    const intervalId = window.setInterval(() => {
+    if (intervalRef.current) {
+      window.clearInterval(intervalRef.current);
+    }
+
+    intervalRef.current = window.setInterval(() => {
       void readClipboardWord();
     }, CLIPBOARD_POLL_INTERVAL_MS);
 
     return () => {
       window.removeEventListener("keydown", handleCopyShortcut);
-      window.clearInterval(intervalId);
+      if (shortcutTimeoutRef.current) {
+        window.clearTimeout(shortcutTimeoutRef.current);
+        shortcutTimeoutRef.current = null;
+      }
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       debug("global selection listeners removed");
     };
   }, [active]);
