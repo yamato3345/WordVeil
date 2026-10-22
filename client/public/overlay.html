@@ -66,8 +66,9 @@
     </div>
 
     <script>
-      const { invoke } = window.__TAURI__.core;
-      const tauriEvent = window.__TAURI__.event;
+      const tauriApi = window.__TAURI_INTERNALS__ || window.__TAURI__;
+      const invoke = tauriApi?.invoke ?? null;
+      const tauriEvent = tauriApi?.event ?? null;
       const overlaySettings = window.__WORDVEIL_OVERLAY_SETTINGS || {
         closeDelay: 3300,
         updateEventName: "word-overlay:update",
@@ -78,11 +79,15 @@
       const wordNode = document.getElementById("wordValue");
 
       const renderWord = (nextWord) => {
+        if (!wordNode) {
+          return;
+        }
+
         const value = typeof nextWord === "string" ? nextWord.trim() : "";
         wordNode.textContent = value || overlaySettings.fallbackText || "";
 
-        if (!value) {
-          void closeOverlay();
+        if (value) {
+          scheduleClose();
         }
       };
 
@@ -114,7 +119,6 @@
 
       window.__WORDVEIL_SET_WORD = (nextWord) => {
         renderWord(nextWord);
-        scheduleClose();
       };
 
       const hydrateInitialWord = async () => {
@@ -124,6 +128,10 @@
           renderWord(fromState || initialWord);
         } catch (_error) {
           renderWord(initialWord);
+        }
+
+        if (!initialWord && !wordNode?.textContent) {
+          scheduleClose();
         }
       };
 

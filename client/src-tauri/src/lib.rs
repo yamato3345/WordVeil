@@ -127,11 +127,14 @@ fn show_word_overlay(
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+
         if let Ok(serialized_word) = serde_json::to_string(&word) {
-            let _ = window.eval(&format!(
-                "window.__WORDVEIL_SET_WORD && window.__WORDVEIL_SET_WORD({serialized_word});"
-            ));
+            let script = format!(
+                "(() => {{ const nextWord = {serialized_word}; if (window.__WORDVEIL_SET_WORD) {{ window.__WORDVEIL_SET_WORD(nextWord); return; }} if (window.location) {{ const query = '?word=' + encodeURIComponent(String(nextWord)); window.location.search = query; }} }})();"
+            );
+            let _ = window.eval(&script);
         }
+
         let _ = window.emit("word-overlay:update", serde_json::json!({ "word": word }));
         return Ok(());
     }
