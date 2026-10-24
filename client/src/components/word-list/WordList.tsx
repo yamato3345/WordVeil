@@ -1,4 +1,5 @@
 import "./WordList.scss";
+import { DesignIcon } from "../ui/DesignIcon";
 
 type WordListItem = {
   word: string;
@@ -9,9 +10,11 @@ type WordListItem = {
 type WordListProps = {
   items: WordListItem[];
   totalLabel?: string;
+  favoriteWords: string[];
+  onToggleFavorite: (word: string) => void;
 };
 
-export function WordList({ items, totalLabel = `${items.length} words` }: WordListProps) {
+export function WordList({ items, totalLabel = `${items.length} words`, favoriteWords, onToggleFavorite }: WordListProps) {
   return (
     <section className="word-list-panel" aria-label="Word list">
       <div className="section-head">
@@ -23,12 +26,18 @@ export function WordList({ items, totalLabel = `${items.length} words` }: WordLi
         {items.map(({ word, type, isSelected }) => (
           <li key={word} className={isSelected ? "is-selected" : ""}>
             <div className="word-entry">
-              <span className="word-entry__icon">📖</span>
+              <img className="word-entry__icon" src="/icons/dictionary.svg" alt="" />
               <span className="word-entry__word" data-word={word}>{word}</span>
               <span className="word-entry__type" data-word={type}>{type}</span>
             </div>
-            <button type="button" className="favorite-button" aria-label={`Save ${word}`}>
-              ☆
+            <button
+              type="button"
+              className={`favorite-button${favoriteWords.includes(word) ? " is-favorite" : ""}`}
+              aria-label={`Favorite ${word}`}
+              aria-pressed={favoriteWords.includes(word)}
+              onClick={() => onToggleFavorite(word)}
+            >
+              <DesignIcon name="star" />
             </button>
           </li>
         ))}

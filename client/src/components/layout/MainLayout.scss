@@ -18,7 +18,7 @@
 
 html,
 body {
-  background-image: url("/Background-Figma.svg");
+  background-image: url("/img/background-figma.svg");
   background-repeat: no-repeat;
   background-position: center center;
   background-size: cover;
@@ -86,21 +86,25 @@ button {
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #d9d3ff, #b9b0f2);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid rgba(117, 103, 215, 0.18);
+  flex-shrink: 0;
 }
 
 .brand__icon {
-  font-size: 16px;
-  line-height: 1;
+  width: 37px;
+  height: 30px;
+  display: block;
+  object-fit: contain;
 }
 
 .title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: px;
+  font-weight: 800;
   color: var(--text);
+  margin-left: 8px;
 }
 
 .titlebar__center {
@@ -231,13 +235,110 @@ button {
 }
 
 .sidebar__footer {
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 14px;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 232px;
+  margin-top: auto;
   padding-top: 18px;
-  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.sidebar__promo {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  width: 232px;
+  min-height: 190px;
+  max-height: 190px;
+  box-sizing: border-box;
+  margin-top: auto;
+}
+
+.sidebar__promo img {
+  display: block;
+  width: 52px;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.sidebar__promo p {
+  margin: 0;
+  text-align: left;
+  line-height: 1.45;
+  color: var(--text-soft);
+  font-size: 14px;
+}
+
+.sidebar__promo p span,
+.sidebar__promo p small {
+  display: block;
+}
+
+.sidebar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--text-soft);
+  width: auto;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #5cd07e;
+  box-shadow: 0 0 0 2px rgba(92, 208, 126, 0.18);
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    width: 100%;
+    min-height: 100vh;
+    padding: 8px 8px 10px;
+  }
+
+  .nav-item {
+    min-height: 40px;
+    padding: 0 10px;
+  }
+
+  .nav-item .nav-title {
+    font-size: 14px;
+  }
+
+  .sidebar__footer {
+    width: 100%;
+    min-height: auto;
+    gap: 8px;
+    padding-top: 12px;
+  }
+
+  .sidebar__promo {
+    width: 100%;
+    min-height: 110px;
+    max-height: 110px;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .sidebar__promo img {
+    width: 34px;
+  }
+
+  .sidebar__promo p {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .sidebar__status {
+    font-size: 12px;
+  }
 }
 
 .progress-illustration {
@@ -326,7 +427,7 @@ button {
   min-height: 172px;
   border-radius: 18px;
   padding: 18px 18px 14px;
-  background: url("/Background-Figma.svg") center center / cover no-repeat;
+  background: url("/img/background-figma.svg") center center / cover no-repeat;
   overflow: hidden;
   border: 1px solid rgba(118, 108, 149, 0.12);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13);

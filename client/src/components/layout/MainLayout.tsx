@@ -1,9 +1,14 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Alphabet } from "../alphabet/Alphabet";
 import { WordList } from "../word-list/WordList";
 import { WordSelection } from "../../features/word-selection/WordSelection";
+import { Sidebar } from "../sidebar/Sidebar";
+import { DesignIcon } from "../ui/DesignIcon";
 import "./MainLayout.scss";
+import { SettingsPage } from "../../features/settings/SettingsPage";
+import { ProfilePage } from "../../features/profile/ProfilePage";
+import { useFavorites } from "../../features/favorites/useFavorites";
+import { usePreferences } from "../../features/preferences/PreferencesProvider";
 
 type WindowActionType = "minimize" | "maximize" | "close";
 
@@ -15,13 +20,13 @@ type WindowControlButtonProps = {
   variant?: "default" | "danger";
 };
 
-const appWindow = getCurrentWindow();
+
 
 const navItems = [
-  { icon: "📘", label: "Dictionary", active: true },
-  { icon: "☆", label: "Favorites" },
-  { icon: "🕘", label: "History" },
-  { icon: "⚙", label: "Settings" },
+  { icon: "/icons/dictionary.svg", label: "Dictionary", active: true },
+  { icon: "/icons/favorites.svg", label: "Favorites" },
+  { icon: "/icons/history.svg", label: "History" },
+  { icon: "/icons/settings.svg", label: "Settings" },
 ];
 
 const alphabet = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
@@ -70,8 +75,17 @@ function WindowControlButton({ action, label, icon, onClick, variant = "default"
 }
 
 export function MainLayout() {
+  const { favoriteWords, toggleFavorite } = useFavorites();
+  const saved = favoriteWords.includes("abandon");
+  const [page, setPage] = useState("Dictionary");
+  const { preferences, resolvedTheme, updatePreferences } = usePreferences();
+  const isWorkspacePage = page === "Settings" || page === "Profile";
+  const toggleTheme = () => {
+    updatePreferences({ theme: resolvedTheme === "dark" ? "light" : "dark" });
+  };
   const handleWindowAction = useCallback(async (action: WindowActionType) => {
     try {
+      const appWindow = getCurrentWindow();
       switch (action) {
         case "minimize":
           await appWindow.minimize();
@@ -95,18 +109,21 @@ export function MainLayout() {
       <header className="titlebar">
         <div className="titlebar__left" data-tauri-drag-region>
           <div className="brand" aria-hidden="true">
-            <span className="brand__icon">📖</span>
+            <img className="brand__icon" src="/logos/logo.svg" alt="" />
           </div>
-          <span className="title">Lexar</span>
+          <span className="title">WordVeil</span>
         </div>
 
         <div className="titlebar__center" data-tauri-drag-region>
           <label className="search" aria-label="Search a word">
-            <span className="search__icon" aria-hidden="true">⌕</span>
+            <span className="search__icon"><DesignIcon name="search" /></span>
             <input type="search" placeholder="Search a word..." aria-label="Search a word" />
             <span className="shortcut">Ctrl + Shift + W</span>
           </label>
         </div>
+
+        <button className="theme-toggle" type="button" onClick={toggleTheme} aria-label="Toggle dark theme" aria-pressed={resolvedTheme === "dark"} title="Switch light / dark theme"><DesignIcon name="theme" /></button>
+        <button className="titlebar-settings" type="button" aria-label="Settings" onClick={() => setPage("Settings")}><img src="/icons/settings.svg" alt="" /></button>
 
         <div className="titlebar__right" aria-label="Window controls">
           {windowControls.map(({ action, label, icon, variant }) => (
@@ -123,41 +140,25 @@ export function MainLayout() {
       </header>
 
       <main className="layout-shell">
-        <WordSelection />
+        <WordSelection active={preferences.captureWords} />
 
-        <aside className="sidebar">
-          <nav className="nav" aria-label="Main navigation">
-            {navItems.map(({ icon, label, active }) => (
-              <button key={label} type="button" className={`nav-item ${active ? "is-active" : ""}`} data-word={label}>
-                <span className="nav-item__icon">{icon}</span>
-                <span>{label}</span>
-              </button>
-            ))}
-          </nav>
+        <Sidebar navItems={navItems} alphabetItems={alphabet} activePage={page} onNavigate={setPage} profileName={preferences.profile.name} />
 
-          <Alphabet items={alphabet} activeIndex={0} />
+        {isWorkspacePage ? (page === "Settings" ? <SettingsPage onOpenProfile={() => setPage("Profile")} /> : <ProfilePage />) : <>
 
-          <div className="sidebar__footer">
-            <div className="progress-illustration" aria-hidden="true">
-              <div className="book-stack" />
-              <div className="lantern" />
-            </div>
-            <p>
-              A little progress
-              <span>each day adds up</span>
-              <small>to big results.</small>
-            </p>
-          </div>
-        </aside>
 
-        <WordList items={wordEntries} totalLabel={`${wordEntries.length} words`} />
+        <WordList items={wordEntries} totalLabel={`${wordEntries.length} words`} favoriteWords={favoriteWords} onToggleFavorite={toggleFavorite} />
 
         <section className="detail-panel" aria-label="Word detail">
           <div className="word-hero">
+            <div className="hero-actions">
+              <button type="button" aria-label="Save abandon" aria-pressed={saved} onClick={() => toggleFavorite("abandon")} className={saved ? "is-saved" : ""}><DesignIcon name="heart" /></button>
+              <span className="hero-more" aria-hidden="true"><DesignIcon name="more" /></span>
+            </div>
             <div className="word-hero__topline">
               <h1 data-word="abandon">abandon</h1>
               <button type="button" className="word-sound" aria-label="Play pronunciation">
-                ◉
+                <DesignIcon name="sound" />
               </button>
             </div>
 
@@ -178,7 +179,7 @@ export function MainLayout() {
 
           <div className="detail-card">
             <div className="card-heading">
-              <span className="card-icon">📝</span>
+              <span className="card-icon"><DesignIcon name="document" /></span>
               <h3>Meanings</h3>
             </div>
 
@@ -188,6 +189,7 @@ export function MainLayout() {
                   <span className="meaning-index">{index + 1}.</span>
                   <div>
                     <p>{item}</p>
+                    <em className="meaning-example">“{["He abandoned his car on the roadside.", "She decided to abandon the project.", "The government abandoned the plan."][index]}”</em>
                     {index === 0 && <span className="pill">most common</span>}
                   </div>
                 </li>
@@ -197,21 +199,21 @@ export function MainLayout() {
 
           <div className="detail-card compact">
             <div className="card-heading">
-              <span className="card-icon">🧠</span>
+              <span className="card-icon"><DesignIcon name="document" /></span>
               <h3>Context / Usage</h3>
             </div>
 
             <ul className="context-list">
-              <li>In personal life: “She abandoned her old life and moved to a new city.”</li>
-              <li>In business: “The company abandoned the idea due to high costs.”</li>
-              <li>In a figurative sense: “He felt abandoned by everyone.”</li>
+              <li>In personal life: <em>“She abandoned her old life and moved to a new city.”</em></li>
+              <li>In business: <em>“The company abandoned the idea due to high costs.”</em></li>
+              <li>In a figurative sense: <em>“He felt abandoned by everyone.”</em></li>
             </ul>
           </div>
 
           <div className="pair-grid">
             <div className="mini-card">
               <div className="mini-card__header">
-                <span className="mini-card__icon">✦</span>
+                <span className="mini-card__icon synonym-icon">♨</span>
                 <span>Synonyms</span>
               </div>
               <p>leave, desert, give up, forsake, relinquish</p>
@@ -219,7 +221,7 @@ export function MainLayout() {
 
             <div className="mini-card is-danger">
               <div className="mini-card__header">
-                <span className="mini-card__icon">❤</span>
+                <span className="mini-card__icon antonym-icon"><DesignIcon name="heart" /></span>
                 <span>Antonyms</span>
               </div>
               <p>keep, continue, support, maintain, retain</p>
@@ -228,12 +230,13 @@ export function MainLayout() {
 
           <div className="fact-box">
             <div className="fact-box__header">
-              <span className="fact-box__icon">✎</span>
+              <span className="fact-box__icon"><DesignIcon name="spark" /></span>
               <span>Did you know?</span>
             </div>
-            <p>“Abandon” can also be used as a noun (e.g. “the abandonment of the project”).</p>
+            <p>“Abandon” can also be a noun, meaning complete freedom from restraint: “with wild abandon.”</p>
           </div>
         </section>
+        </>}
       </main>
     </div>
   );

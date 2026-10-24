@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { GlobalWordsSelection } from "./globalSelection/GlobalWordsSelection";
 import "./WordSelection.scss";
@@ -9,8 +10,9 @@ export type SelectedWord = {
   y: number;
 };
 
-export function WordSelection() {
+export function WordSelection({ active = true }: { active?: boolean }) {
   const [selectedWord, setSelectedWord] = useState<SelectedWord | null>(null);
+  const captureInProgressRef = useRef(false);
   const mousePositionRef = useRef({ x: window.innerWidth - 260, y: 80 });
 
   const handleWordSelected = async (text: string, position?: { x: number; y: number }) => {
@@ -54,6 +56,36 @@ export function WordSelection() {
   };
 
   useEffect(() => {
+    if (!active) {
+      setSelectedWord(null);
+      void invoke("close_word_overlay").catch(console.error);
+      return;
+    }
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const capture = async () => {
+      if (captureInProgressRef.current) return;
+      captureInProgressRef.current = true;
+      try {
+        const text = await invoke<string>("capture_selected_text");
+        if (!disposed && text.trim()) await handleWordSelected(text);
+      } catch (error) {
+        console.error("[WordSelection] screen selection failed", error);
+      } finally {
+        captureInProgressRef.current = false;
+      }
+    };
+    void listen("shortcut-triggered", () => void capture()).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    }).catch((error) => console.error("[WordSelection] shortcut listener failed", error));
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [active]);
+
+  useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       mousePositionRef.current = { x: event.clientX, y: event.clientY };
     };
@@ -93,7 +125,7 @@ export function WordSelection() {
 
   return (
     <>
-      <GlobalWordsSelection active={true} onWordSelected={handleWordSelected} />
+      <GlobalWordsSelection active={active} onWordSelected={handleWordSelected} />
 
       {selectedWord && (
         <div

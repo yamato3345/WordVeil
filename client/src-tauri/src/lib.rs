@@ -1,12 +1,15 @@
+mod clipboard;
+
 use std::process::Command;
-use std::sync::Mutex;
-use std::thread;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{Emitter, LogicalPosition, Manager, Position, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 struct OverlayState {
     word: Mutex<String>,
+    updating: Arc<Mutex<()>>,
+    generation: Arc<AtomicU64>,
 }
 
 fn encode_uri_component(value: &str) -> String {
@@ -26,29 +29,10 @@ fn encode_uri_component(value: &str) -> String {
 }
 
 #[tauri::command]
-fn read_clipboard_word() -> Result<String, String> {
-    let candidates = [
-        vec!["wl-paste", "--no-newline"],
-        vec!["wl-paste", "--no-newline", "--primary"],
-        vec!["xclip", "-selection", "clipboard", "-o"],
-        vec!["xclip", "-selection", "primary", "-o"],
-    ];
-
-    for args in candidates {
-        let mut command = Command::new(&args[0]);
-        command.args(&args[1..]);
-
-        if let Ok(output) = command.output() {
-            if output.status.success() {
-                let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !text.is_empty() {
-                    return Ok(text);
-                }
-            }
-        }
-    }
-
-    Ok(String::new())
+async fn read_clipboard_word() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(clipboard::read)
+        .await
+        .map_err(|err| format!("Clipboard task failed: {err}"))?
 }
 
 #[tauri::command]
@@ -103,20 +87,64 @@ async fn capture_selected_text() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn show_word_overlay(
+async fn show_word_overlay(
     app: tauri::AppHandle,
-    state: tauri::State<OverlayState>,
+    state: tauri::State<'_, OverlayState>,
     word: String,
     x: f64,
     y: f64,
 ) -> Result<(), String> {
-    if word.trim().is_empty() {
+    if word.trim().is_empty() || word.len() > 1024 || !x.is_finite() || !y.is_finite() {
         return Ok(());
     }
+
+    let _updating = state.updating.lock().map_err(|err| err.to_string())?;
+    // Frontend mouse coordinates belong to the main window, not the desktop.
+    let (x, y) = if let Ok(cursor) = app.cursor_position() {
+        let monitor = app.monitor_from_point(cursor.x, cursor.y).ok().flatten();
+        if let Some(monitor) = monitor {
+            let scale = monitor.scale_factor();
+            let origin = monitor.position();
+            let size = monitor.size();
+            let left = origin.x as f64 / scale;
+            let top = origin.y as f64 / scale;
+            (
+                (cursor.x / scale + 18.0).clamp(left, (left + size.width as f64 / scale - 220.0).max(left)),
+                (cursor.y / scale - 30.0).clamp(top, (top + size.height as f64 / scale - 110.0).max(top)),
+            )
+        } else {
+            (x, y)
+        }
+    } else if let Some(main) = app.get_webview_window("main") {
+        match (main.inner_position(), main.scale_factor()) {
+            (Ok(origin), Ok(scale)) => (origin.x as f64 / scale + x, origin.y as f64 / scale + y),
+            _ => (x, y), // Wayland may leave placement entirely to the compositor.
+        }
+    } else {
+        (x, y)
+    };
 
     if let Ok(mut current_word) = state.word.lock() {
         *current_word = word.clone();
     }
+
+    let generation = state.generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let current = state.generation.clone();
+    let updating = state.updating.clone();
+    let timer_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        // Use a blocking worker so hiding is independent of WebView timer throttling.
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            std::thread::sleep(std::time::Duration::from_millis(3300));
+            if let Ok(_guard) = updating.lock() {
+                if current.load(Ordering::SeqCst) == generation {
+                    if let Some(window) = timer_app.get_webview_window("word-overlay") {
+                        let _ = window.hide();
+                    }
+                }
+            }
+        }).await;
+    });
 
     let encoded_word = encode_uri_component(&word);
     let url = format!("overlay.html?word={encoded_word}");
@@ -125,17 +153,14 @@ fn show_word_overlay(
         let _ = window.set_position(Position::Logical(LogicalPosition::new(x, y)));
         let _ = window.set_always_on_top(true);
         let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-
         if let Ok(serialized_word) = serde_json::to_string(&word) {
             let script = format!(
                 "(() => {{ const nextWord = {serialized_word}; if (window.__WORDVEIL_SET_WORD) {{ window.__WORDVEIL_SET_WORD(nextWord); return; }} if (window.location) {{ const query = '?word=' + encodeURIComponent(String(nextWord)); window.location.search = query; }} }})();"
             );
-            let _ = window.eval(&script);
+            window.eval(&script).map_err(|err| format!("Failed to update overlay: {err}"))?;
         }
 
-        let _ = window.emit("word-overlay:update", serde_json::json!({ "word": word }));
+        window.show().map_err(|err| format!("Failed to show overlay: {err}"))?;
         return Ok(());
     }
 
@@ -153,21 +178,12 @@ fn show_word_overlay(
         .visible_on_all_workspaces(true)
         .shadow(false)
         .skip_taskbar(true)
-        .focused(true)
+        .focused(false)
         .build()
         .map_err(|err| format!("Failed to create overlay window: {err}"))?;
 
-    let _ = window.set_focus();
     window.show().map_err(|err| format!("Failed to show overlay window: {err}"))?;
     let _ = window.emit("word-overlay:update", serde_json::json!({ "word": word }));
-
-    let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        thread::sleep(Duration::from_millis(3600));
-        if let Some(existing) = app_handle.get_webview_window("word-overlay") {
-            let _ = existing.close();
-        }
-    });
 
     Ok(())
 }
@@ -175,7 +191,7 @@ fn show_word_overlay(
 #[tauri::command]
 fn close_word_overlay(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("word-overlay") {
-        let _ = window.close();
+        let _ = window.hide();
     }
 }
 
@@ -208,8 +224,11 @@ pub fn run() {
     tauri::Builder::default()
         .manage(OverlayState {
             word: Mutex::new(String::new()),
+            updating: Arc::new(Mutex::new(())),
+            generation: Arc::new(AtomicU64::new(0)),
         })
         .setup(|app| {
+            clipboard::watch(app.handle().clone());
             #[cfg(desktop)]
             {
                 if let Err(err) = app
@@ -223,7 +242,7 @@ pub fn run() {
                 } else {
                     println!("[WordSelection][shortcut] global shortcut plugin initialized");
 
-                    let shortcuts = ["Ctrl+Alt+5", "Ctrl+Shift+9", "Alt+F7"];
+                    let shortcuts = ["Ctrl+Shift+W", "Ctrl+Alt+5", "Ctrl+Shift+9", "Alt+F7"];
                     for shortcut in shortcuts {
                         let shortcut_name = shortcut.to_string();
                         let result = app.global_shortcut().on_shortcut(shortcut_name.as_str(), {
@@ -260,6 +279,17 @@ pub fn run() {
             }
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                if let Some(watcher) = window.app_handle().try_state::<clipboard::ClipboardWatcher>() {
+                    if let Ok(mut child) = watcher.0.lock() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                }
+                window.app_handle().exit(0);
+            }
         })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

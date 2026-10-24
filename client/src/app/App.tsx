@@ -1,12 +1,9 @@
 import { MainLayout } from "../components/layout/MainLayout";
-import "../components/layout/MainLayout.scss"
+import "./reference.css";
+import "./themes.css";
+import "./workspace.css";
+import { PreferencesProvider } from "../features/preferences/PreferencesProvider";
 
-function App() {
-  return (
-    <MainLayout>
-
-    </MainLayout>
-  );
+export default function App() {
+  return <PreferencesProvider><MainLayout /></PreferencesProvider>;
 }
-
-export default App
