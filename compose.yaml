@@ -1,0 +1,46 @@
+name: wordveil-dev
+
+services:
+  postgres:
+    image: postgres:18.4-bookworm
+    environment:
+      POSTGRES_USER: wordveil
+      POSTGRES_PASSWORD: wordveil_dev
+      POSTGRES_DB: wordveil
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+
+  migrate:
+    image: migrate/migrate:v4.19.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./server/internal/storage/postgres/migrations:/migrations:ro
+    command: ["-path", "/migrations", "-database", "postgres://wordveil:wordveil_dev@postgres:5432/wordveil?sslmode=disable", "up"]
+
+  server:
+    build: ./server
+    environment:
+      HTTP_ADDR: :8080
+      DATABASE_URL: postgres://wordveil:wordveil_dev@postgres:5432/wordveil?sslmode=disable
+      JWT_SECRET: local-development-only-change-in-production
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/main/"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres_data:

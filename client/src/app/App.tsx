@@ -3,7 +3,8 @@ import "./reference.css";
 import "./themes.css";
 import "./workspace.css";
 import { PreferencesProvider } from "../features/preferences/PreferencesProvider";
+import { AuthProvider } from "../features/auth/AuthProvider";
 
 export default function App() {
-  return <PreferencesProvider><MainLayout /></PreferencesProvider>;
+  return <PreferencesProvider><AuthProvider><MainLayout /></AuthProvider></PreferencesProvider>;
 }

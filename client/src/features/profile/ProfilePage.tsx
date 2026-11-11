@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { usePreferences } from "../preferences/PreferencesProvider";
+import { useAuth } from "../auth/AuthProvider";
 
 export function ProfilePage() {
+  const { user, logout } = useAuth();
   const { preferences, updatePreferences, storageError } = usePreferences();
   const [draft, setDraft] = useState(preferences.profile);
   const [saved, setSaved] = useState(false);
@@ -45,9 +47,9 @@ export function ProfilePage() {
       <div className="profile-banner">
         <div className="profile-avatar" aria-hidden="true">{initials}</div>
         <div>
-          <h2>{preferences.profile.name || "Word learner"}</h2>
-          <p>Your personal WordVeil workspace</p>
-          <span className="local-badge">Local profile</span>
+          <h2>{user.name}</h2>
+          <p>{user.email}</p>
+          <button type="button" className="primary-button" onClick={logout}>Вийти</button>
         </div>
       </div>
 

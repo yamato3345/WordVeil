@@ -108,10 +108,17 @@ export function MainLayout() {
     <div className="app-shell">
       <header className="titlebar">
         <div className="titlebar__left" data-tauri-drag-region>
+          {/* Previous logo and title — uncomment to restore.
           <div className="brand" aria-hidden="true">
             <img className="brand__icon" src="/logos/logo.svg" alt="" />
           </div>
           <span className="title">WordVeil</span>
+          */}
+          <img
+            className="brand__logo"
+            src={resolvedTheme === "dark" ? "/logos/dark_logo.png" : "/logos/light_logo.png"}
+            alt="WordVeil"
+          />
         </div>
 
         <div className="titlebar__center" data-tauri-drag-region>

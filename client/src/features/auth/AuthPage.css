@@ -1,0 +1,14 @@
+.auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 32px 20px; box-sizing: border-box; background: radial-gradient(ellipse at top, var(--accent-soft), transparent 70%); }
+.auth-card { width: 100%; max-width: 400px; padding: 36px; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 20px 70px #0001; }
+.auth-brand { color: var(--accent); font-size: 24px; font-weight: 700; padding-bottom: 20px; }
+.auth-card h1 { font-size: 24px; margin: 0 0 12px; }
+.auth-card p { color: var(--muted); line-height: 1.6; }
+.auth-card fieldset { border: 0; padding: 0; margin: 24px 0 0; min-width: 0; display: grid; gap: 16px; }
+.auth-card label { display: grid; gap: 8px; font-size: 13px; }
+.auth-card input { width: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-input); color: var(--text); font: inherit; }
+.auth-card button { cursor: pointer; font: inherit; }
+.auth-submit { padding: 13px; border: 0; border-radius: 9px; background: var(--purple-strong); color: var(--surface); font-weight: 600; }
+.auth-switch { width: 100%; margin-top: 22px; padding: 8px 0; border: 0; background: transparent; color: var(--accent); line-height: 1.5; }
+.auth-card .auth-error { color: var(--error); margin: 0; }
+.auth-card button:disabled { cursor: wait; opacity: .65; }
+@media (max-width: 440px) { .auth-card { padding: 24px; } }
